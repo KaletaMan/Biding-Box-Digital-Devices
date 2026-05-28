@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include <stdlib.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -59,7 +60,8 @@ typedef enum {
     STATE_REDOUBLE,
     STATE_BID_LEVEL,
     STATE_BID_SUIT,
-    STATE_AUCTION_END
+    STATE_AUCTION_END,
+	STATE_BIDDING_VIEW
 } State;
 
 typedef enum {
@@ -78,7 +80,7 @@ typedef struct {
     Suit suit;
 } Call;
 
-#define MAX_CALLS 20
+#define MAX_CALLS 44
 
 volatile Call bidding_history[MAX_CALLS];
 volatile uint8_t bidding_count = 0;
@@ -93,6 +95,13 @@ volatile uint8_t redouble_available = 0;
 
 volatile uint8_t last_bid_level = 0;   // 0 = jeszcze nic nie było
 volatile Suit last_bid_suit = CLUBS;
+
+volatile int dealer = 0;
+volatile int declarer = 0;
+volatile int first_color = 0;
+volatile int second_color = 0;
+
+uint8_t current_page = 1;
 
 /* USER CODE END PV */
 
@@ -381,7 +390,10 @@ void SetNextBidAfterLast(void)
         }
     }
 }
-
+int GetRandomRange(int min, int max)
+{
+    return min + (rand() % (max - min + 1));
+}
 void ResetBidding(void)
 {
     bidding_count = 0;
@@ -392,9 +404,80 @@ void ResetBidding(void)
     double_available = 0;
     redouble_available = 0;
     current_state = STATE_PASS;
-    ILI9488_FillRect(0, 0, 320, 480, 0, 0, 0);
-}
 
+    dealer = GetRandomRange(0,3);
+
+    first_color = GetRandomRange(0,1);
+    second_color = GetRandomRange(0,1);
+    DrawPlayerColors();
+
+}
+void drawNSEW(int direction, int x, int y){
+	switch(direction){
+	case 0:
+		ILI9488_FillRect(x,      y,  2, 16, 220, 220, 220);
+		ILI9488_FillRect(x + 7,  y,  2, 16, 220, 220, 220);
+
+		ILI9488_FillRect(x + 2,  y,  2, 4, 220, 220, 220);
+		ILI9488_FillRect(x + 3,  y + 4,  2, 4, 220, 220, 220);
+		ILI9488_FillRect(x + 4,  y + 8,  2, 4, 220, 220, 220);
+		ILI9488_FillRect(x + 5,  y + 12, 2, 4, 220, 220, 220);
+		break;
+	case 1:
+		ILI9488_FillRect(x,y,  2, 16, 220, 220, 220);
+		ILI9488_FillRect(x,y,  6, 2, 220, 220, 220);
+		ILI9488_FillRect(x,y+6,  6, 2, 220, 220, 220);
+		ILI9488_FillRect(x,y+14,  6, 2, 220, 220, 220);
+		break;
+	case 2: //S
+		ILI9488_FillRect(x+2,  y,  4, 2, 220, 220, 220);
+		ILI9488_FillRect(x+2,  y+7,  4, 2, 220, 220, 220);
+		ILI9488_FillRect(x+2,  y+14,  4, 2, 220, 220, 220);
+		ILI9488_FillRect(x,  y+2,  2, 5, 220, 220, 220);
+		ILI9488_FillRect(x+6,  y+9,  2, 5, 220, 220, 220);
+		break;
+	case 3: //W
+		ILI9488_FillRect(x,      y,  2, 16, 220, 220, 220);
+		ILI9488_FillRect(x + 7,  y,  2, 16, 220, 220, 220);
+
+		ILI9488_FillRect(x + 2,  y+14,  1, 2, 220, 220, 220);
+		ILI9488_FillRect(x + 3,  y+13,  1, 2, 220, 220, 220);
+		ILI9488_FillRect(x + 4,  y+12,  1, 2, 220, 220, 220);
+		ILI9488_FillRect(x + 5,  y+13,  1, 2, 220, 220, 220);
+		ILI9488_FillRect(x + 6,  y+14,  1, 2, 220, 220, 220);
+
+		break;
+	}
+}
+void DrawPlayerColors(void){
+	ILI9488_FillRect(0, 100, 320, 280, 0, 0, 0);
+	drawNSEW(dealer, 35, 160);
+	drawNSEW((dealer+1)%4, 110, 160);
+	drawNSEW((dealer+2)%4, 185, 160);
+	drawNSEW((dealer+3)%4, 260, 160);
+
+
+	for(int i = 0; i<4; i++){
+	   if (i%2 ==0){
+	    	if (first_color == 0){
+	    		ILI9488_FillRect(15 + i*75,183,  50, 5, 0, 255, 0);
+	    	}else{
+	    		ILI9488_FillRect(15 + i*75,183,  50, 5, 255, 0, 0);
+	    	}
+	    }else{
+	    	if (second_color == 0){
+	    		    ILI9488_FillRect(15 + i*75,183,  50, 5, 0, 255, 0);
+	    	}else{
+	    		    ILI9488_FillRect(15 + i*75,183,  50, 5, 255, 0, 0);
+	    		 }
+	    }
+	}
+
+}
+void SeeBidding(void){
+	DrawPlayerColors();
+	DrawWholeHistory();
+}
 
 void CheckAuctionEnd(void)
 {
@@ -424,6 +507,11 @@ void CheckAuctionEnd(void)
 
 void HandleNext(void)
 {
+	if (bidding_count >= 24 && current_page == 1) {
+	        current_page = 2;
+	        DrawWholeHistory();
+	        return;
+	    }
     uint8_t min_level = 1;
     double_available = 0;
     redouble_available = 0;
@@ -492,18 +580,39 @@ void HandleNext(void)
             break;
 
         case STATE_AUCTION_END:
+        	current_page = 1;
+        	ResetBidding();
+            break;
+        case STATE_BIDDING_VIEW:
+            current_state =STATE_AUCTION_END;
+            CheckAuctionEnd();
             break;
     }
 }
 
 void HandleBack(void)
 {
+	if (bidding_count >= 24) {
+	        if (current_state == STATE_BIDDING_VIEW) {
+	            current_page = (current_page == 1) ? 2 : 1;
+	            DrawWholeHistory();
+	            return;
+	        }
+	        if (current_state == STATE_PASS) {
+	        	current_page = (current_page == 1) ? 2 : 1;
+	            DrawWholeHistory();
+	            return;
+	        }
+	}
     switch(current_state)
     {
         case STATE_AUCTION_END:
-            ResetBidding();
+        	current_state = STATE_BIDDING_VIEW;
+            SeeBidding();
+            DrawWholeHistory();
             break;
-
+        case STATE_BIDDING_VIEW:
+        	break;
         case STATE_PASS:
             break;
 
@@ -536,6 +645,11 @@ void HandleBack(void)
 void HandleOK(void)
 {
     if (current_state == STATE_AUCTION_END) return;
+    if (bidding_count >= 24 && current_page == 1) {
+            current_page = 2;
+            DrawWholeHistory();
+            return;
+        }
 
     switch(current_state)
     {
@@ -571,6 +685,10 @@ void HandleOK(void)
             SetNextBidAfterLast();
             current_state = STATE_PASS;
             break;
+        case STATE_BIDDING_VIEW:
+        	current_state =STATE_AUCTION_END;
+        	CheckAuctionEnd();
+        	break;
     }
 }
 
@@ -584,8 +702,8 @@ void DrawSmallPass(uint16_t x, uint16_t y)
 }
 void DrawBigPass(uint16_t x, uint16_t y)
 {
-	ClearColorTopPanel();
-	ClearNumberTopPanel();
+//	ClearColorTopPanel();
+//	ClearNumberTopPanel();
     // białe P
     ILI9488_FillRect(x, y, 16, 80, 255, 255, 255);
     ILI9488_FillRect(x + 16, y, 32, 16, 255, 255, 255);
@@ -634,17 +752,33 @@ void ShowRedouble(void)
         ILI9488_FillRect(x2 + 48 - 4*i, y + 4*i, 8, 8, 0, 0, 255);
     }
 }
-
 void DrawHistory(void)
 {
     if (bidding_count == 0) return;
 
+    if (bidding_count == 25) {
+        current_page = 2;
+        DrawWholeHistory();
+        return;
+    }
+
     uint8_t i = bidding_count - 1;
-    uint8_t col = i % 4;
-    uint8_t row = i / 4;
+
+    if (current_page == 1 && i >= 24) return;
+    if (current_page == 2 && i < 20) return;
+
+    uint8_t col, row;
+    if (current_page == 1) {
+        col = i % 4;
+        row = i / 4;
+    } else {
+        uint8_t rel_i = i - 20;
+        col = rel_i % 4;
+        row = rel_i / 4;
+    }
 
     uint16_t cell_x = 20 + col * 75;
-    uint16_t cell_y = 255 + row * 44;
+    uint16_t cell_y = 211 + row * 44;
 
     ILI9488_FillRect(cell_x - 4, cell_y - 10, 46, 36, 44, 40, 40);
 
@@ -664,6 +798,59 @@ void DrawHistory(void)
     {
         DrawTinyDigit(cell_x, cell_y - 6, bidding_history[i].level);
         DrawSmallSuit(cell_x + 20, cell_y + 2, bidding_history[i].suit);
+    }
+}
+
+void DrawWholeHistory(void)
+{
+    ILI9488_FillRect(10, 211, 300, 265, 0, 0, 0);
+
+    if (bidding_count == 0) return;
+
+    int start_idx = 0;
+    int end_idx = bidding_count;
+
+    if (current_page == 2) {
+        start_idx = 20;
+    } else {
+        if (end_idx > 24) end_idx = 24;
+    }
+
+    for (int i = start_idx; i < end_idx; i++) {
+        uint8_t col = 0;
+        uint8_t row = 0;
+
+        if (current_page == 1) {
+            col = i % 4;
+            row = i / 4;
+        } else {
+        	uint8_t rel_i = i - 20;
+            col = rel_i % 4;
+            row = rel_i / 4;
+        }
+
+        uint16_t cell_x = 20 + col * 75;
+        uint16_t cell_y = 211 + row * 44;
+
+        ILI9488_FillRect(cell_x - 4, cell_y - 10, 46, 36, 44, 40, 40);
+
+        if (bidding_history[i].type == CALL_PASS)
+        {
+            DrawSmallPass(cell_x, cell_y);
+        }
+        else if (bidding_history[i].type == CALL_DOUBLE)
+        {
+            DrawSmallX(cell_x, cell_y);
+        }
+        else if (bidding_history[i].type == CALL_REDOUBLE)
+        {
+            DrawSmallXX(cell_x, cell_y);
+        }
+        else if (bidding_history[i].type == CALL_BID)
+        {
+            DrawTinyDigit(cell_x, cell_y - 6, bidding_history[i].level);
+            DrawSmallSuit(cell_x + 20, cell_y + 2, bidding_history[i].suit);
+        }
     }
 }
 
@@ -762,6 +949,7 @@ void Render(void)
         case STATE_PASS:
             ClearColorTopPanel();
             ClearNumberTopPanel();
+
             DrawBigPass(80, 60);
             break;
 
@@ -1093,7 +1281,7 @@ void ShowDouble(void)
 
 void ShowLevel(void)
 {
-    ClearTopPanel();
+    //ClearTopPanel();
 
     //uint16_t x = 195;
     uint16_t x = 35;
@@ -1224,9 +1412,9 @@ int main(void)
 #endif
 
   ILI9488_Init_Minimal();
-  ClearTopPanel();
+  ILI9488_FillRect(0, 0, 320, 480,0,0,0);
+  ResetBidding();
   Render();
-  ILI9488_FillRect(0, 240, 320, 240, 0, 0, 0);
   DrawHistory();
   /* USER CODE END 2 */
 
@@ -1239,7 +1427,7 @@ int main(void)
 	        {
 	            HandleNext();
 	            Render();
-	            HAL_Delay(200);
+	            HAL_Delay(50);
 
 	            while (BUTTON_NEXT_PRESSED())
 	            {
@@ -1256,7 +1444,7 @@ int main(void)
 	             DrawHistory();
 	            }
 
-	            HAL_Delay(200);
+	            HAL_Delay(50);
 
 	            while (BUTTON_OK_PRESSED())
 	            {
@@ -1269,7 +1457,7 @@ int main(void)
 	        {
 	            HandleBack();
 	            Render();
-	            HAL_Delay(200);
+	            HAL_Delay(50);
 
 	            while (BUTTON_BACK_PRESSED())
 	            {
